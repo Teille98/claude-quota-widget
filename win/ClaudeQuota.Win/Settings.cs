@@ -1,3 +1,4 @@
+using ClaudeQuota.Core;
 using System.Text.Json;
 
 namespace ClaudeQuota.Win;
@@ -10,6 +11,11 @@ public sealed class Settings
     /// <summary>Floating window position in screen pixels; null = default bottom-right corner.</summary>
     public int? X { get; set; }
     public int? Y { get; set; }
+
+    /// <summary>claude.ai accounts, in tab order. The first install has only the default account.</summary>
+    public List<AccountInfo> Accounts { get; set; } = [];
+    /// <summary>Id of the account shown in the panel and the floating window.</summary>
+    public string? Selected { get; set; }
 
     static string FilePath => Path.Combine(ClaudeAiUsageSource.AppDir, "settings.json");
     static readonly JsonSerializerOptions Opts = new() { WriteIndented = true };

@@ -65,6 +65,8 @@ public enum FetchError { None, AuthRequired, Offline, BadFormat, NoLimits, Timeo
 public sealed record FetchResult(QuotaSnapshot? Snapshot, FetchError Error, string? Detail = null)
 {
     public bool Ok => Error == FetchError.None && Snapshot is not null;
+    /// <summary>Organization name sent by the script; only a default account label, never logged or exported.</summary>
+    public string? Org { get; init; }
     public static FetchResult Fail(FetchError e, string? detail = null) => new(null, e, detail);
 }
 
@@ -121,7 +123,7 @@ public static class UsageParser
                 limits.Add(new QuotaLimit(kind, (int)Math.Round(Math.Clamp(p.GetDouble(), 0, 100)), reset, Str(l, "severity"), Str(l, "model")));
             }
             if (limits.Count == 0) return FetchResult.Fail(FetchError.NoLimits);
-            return new FetchResult(new QuotaSnapshot(limits, now), FetchError.None);
+            return new FetchResult(new QuotaSnapshot(limits, now), FetchError.None) { Org = Str(root, "org") };
         }
         catch (JsonException e)
         {
@@ -280,4 +282,27 @@ public static class QuotaExport
         File.WriteAllText(tmp, ToJson(s));
         File.Move(tmp, path, overwrite: true);
     }
+}
+
+/// <summary>
+/// A claude.ai account. The first one ("default") keeps the original file names and the default
+/// browser profile, so single-account installs need no migration; others get their own files and profile.
+/// </summary>
+public sealed record AccountInfo(string Id, string Name = "")
+{
+    public const string DefaultId = "default";
+    public bool IsDefault => Id == DefaultId;
+
+    /// <summary>File name inside the app folder, e.g. "last.json" or "last-3f9a2c.json".</summary>
+    public string File(string baseName) =>
+        IsDefault ? baseName : $"{Path.GetFileNameWithoutExtension(baseName)}-{Id}{Path.GetExtension(baseName)}";
+
+    /// <summary>Browser profile name; null = the default profile.</summary>
+    public string? Profile => IsDefault ? null : $"acc-{Id}";
+
+    /// <summary>Label shown in the tabs: the given name, else "Account N".</summary>
+    public string Label(int index, Lang? lang = null) =>
+        !string.IsNullOrWhiteSpace(Name) ? Name.Trim() : L10n.T($"Account {index + 1}", $"Compte {index + 1}", lang);
+
+    public static AccountInfo New() => new(Guid.NewGuid().ToString("N")[..8]);
 }

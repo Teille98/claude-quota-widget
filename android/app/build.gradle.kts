@@ -10,8 +10,8 @@ android {
         applicationId = "dev.teo.claudequota"
         minSdk = 31 // Android 12: responsive widgets, system corner radius, RemoteViews tints
         targetSdk = 36
-        versionCode = 100
-        versionName = "1.0.0"
+        versionCode = 110
+        versionName = "1.1.0"
     }
     // Release key lives outside the repo: path and passwords in ~/.gradle/gradle.properties (CLAUDEQUOTA_*).
     // Without them, assembleRelease produces an unsigned APK.
@@ -41,6 +41,7 @@ android {
 
 dependencies {
     implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation("androidx.webkit:webkit:1.14.0") // separate WebView profiles (one per account)
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303") // real implementation (android.jar only has stubs)
 }

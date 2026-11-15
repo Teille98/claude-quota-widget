@@ -25,20 +25,28 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
         private const val PERIODIC = "quota-periodic"
         private const val NOW = "quota-now"
 
+        /** Reads every account in turn (one WebView at a time). */
         suspend fun refresh(ctx: Context, origin: String) {
-            val store = Store(ctx)
-            store.busy = true
-            Widgets.updateAll(ctx)
-            val t0 = System.currentTimeMillis()
-            val r = UsageParser.parse(QuotaReader.read(ctx), Instant.now())
-            val screen = if (ctx.getSystemService(android.os.PowerManager::class.java).isInteractive) "screen on" else "screen off"
-            store.log("[$origin] " + (if (r.ok) "ok ${r.snapshot!!.session?.percent ?: "–"} %" else r.error.name) +
-                " · ${System.currentTimeMillis() - t0} ms · $screen")
-            val prevError = store.error
-            val before = store.apply(r)
-            if (r.ok) Notifier.thresholds(ctx, before, r.snapshot!!)
-            else if (r.error == FetchError.AUTH && prevError != FetchError.AUTH) Notifier.authExpired(ctx)
-            Widgets.updateAll(ctx)
+            val accounts = Accounts(ctx)
+            val all = accounts.list
+            for (a in all) {
+                val store = Store(ctx, a.id)
+                store.busy = true
+                Widgets.updateAll(ctx)
+                val t0 = System.currentTimeMillis()
+                val r = UsageParser.parse(QuotaReader.read(ctx, a), Instant.now())
+                val screen = if (ctx.getSystemService(android.os.PowerManager::class.java).isInteractive) "screen on" else "screen off"
+                // Account id only: the account name may contain an e-mail address.
+                store.log("[$origin] [${a.id}] " + (if (r.ok) "ok ${r.snapshot!!.session?.percent ?: "–"} %" else r.error.name) +
+                    " · ${System.currentTimeMillis() - t0} ms · $screen")
+                val prevError = store.error
+                val before = store.apply(r)
+                if (r.ok) accounts.nameFromOrg(a.id, r.org)
+                val label = if (all.size > 1) accounts.displayName(a) else null
+                if (r.ok) Notifier.thresholds(ctx, a, label, before, r.snapshot!!)
+                else if (r.error == FetchError.AUTH && prevError != FetchError.AUTH) Notifier.authExpired(ctx, a, label)
+                Widgets.updateAll(ctx)
+            }
         }
 
         /** Android runs it at best every 15 min (enforced minimum), only with a network. */

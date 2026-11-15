@@ -27,7 +27,13 @@
 
     <!-- App screen -->
     <string name="btn_refresh">Refresh</string>
-    <string name="btn_login">Sign in / switch account</string>
+    <string name="btn_login">Sign in to this account</string>
+    <string name="btn_add_account">Add an account</string>
+    <string name="btn_remove_account">Remove this account</string>
+    <string name="rename_title">Account name</string>
+    <string name="remove_title">Remove “%s”?</string>
+    <string name="remove_message">Its values and its claude.ai session on this phone will be deleted. The claude.ai account itself is not affected.</string>
+    <string name="remove_confirm">Remove</string>
     <string name="btn_pin">Add the widget to the home screen</string>
     <string name="btn_battery">Allow background reads</string>
     <string name="history_title">Last 7 days</string>

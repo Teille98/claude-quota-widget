@@ -87,7 +87,8 @@ data class Snapshot(val limits: List<QuotaLimit>, val fetchedAt: Instant) {
 
 enum class FetchError { NONE, AUTH, OFFLINE, BAD_FORMAT, NO_LIMITS, TIMEOUT, UNKNOWN }
 
-data class FetchResult(val snapshot: Snapshot?, val error: FetchError, val detail: String? = null) {
+/** [org] is the organization name sent by the script: only a default account label, never logged or exported. */
+data class FetchResult(val snapshot: Snapshot?, val error: FetchError, val detail: String? = null, val org: String? = null) {
     val ok get() = snapshot != null && error == FetchError.NONE
 
     companion object {
@@ -142,7 +143,7 @@ object UsageParser {
             )
         }
         if (limits.isEmpty()) return FetchResult.fail(FetchError.BAD_FORMAT, "no usable limit")
-        return FetchResult(Snapshot(limits, now), FetchError.NONE)
+        return FetchResult(Snapshot(limits, now), FetchError.NONE, org = o.str("org")?.trim()?.takeIf { it.isNotEmpty() })
     }
 }
 

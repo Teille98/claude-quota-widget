@@ -3,40 +3,48 @@ package dev.teo.claudequota
 import android.content.Context
 import android.content.SharedPreferences
 
-/** Last known values + state of the last read. No session data here (it stays in the WebView). */
-class Store(ctx: Context) {
+/**
+ * Last known values + state of the last read, for one account ([accountId]).
+ * No session data here (it stays in the WebView profile).
+ */
+class Store(ctx: Context, val accountId: String = AccountModel.DEFAULT) {
     val prefs: SharedPreferences = ctx.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
-    val snapshot: Snapshot? get() = Snapshot.fromJson(prefs.getString(K_SNAP, null))
+    val snapshot: Snapshot? get() = Snapshot.fromJson(prefs.getString(k(K_SNAP), null))
 
     val error: FetchError
-        get() = runCatching { FetchError.valueOf(prefs.getString(K_ERR, null) ?: "") }.getOrDefault(FetchError.NONE)
+        get() = runCatching { FetchError.valueOf(prefs.getString(k(K_ERR), null) ?: "") }.getOrDefault(FetchError.NONE)
 
     /** A read is in progress; expires on its own after 60 s (process killed mid-read). */
     var busy: Boolean
-        get() = System.currentTimeMillis() - prefs.getLong(K_BUSY, 0) < 60_000
-        set(v) = prefs.edit().putLong(K_BUSY, if (v) System.currentTimeMillis() else 0).apply()
+        get() = System.currentTimeMillis() - prefs.getLong(k(K_BUSY), 0) < 60_000
+        set(v) = prefs.edit().putLong(k(K_BUSY), if (v) System.currentTimeMillis() else 0).apply()
 
     /** Applies a read result. Returns the previous value (for threshold notifications). */
     fun apply(r: FetchResult): Snapshot? {
         val before = snapshot
         prefs.edit().apply {
             if (r.ok) {
-                putString(K_SNAP, r.snapshot!!.toJson())
-                putString(K_HIST, History.toJson(History.add(history7d, r.snapshot)))
-                putString(K_ERR, FetchError.NONE.name)
+                putString(k(K_SNAP), r.snapshot!!.toJson())
+                putString(k(K_HIST), History.toJson(History.add(history7d, r.snapshot)))
+                putString(k(K_ERR), FetchError.NONE.name)
             } else {
-                putString(K_ERR, r.error.name)
+                putString(k(K_ERR), r.error.name)
             }
-            putLong(K_BUSY, 0)
+            putLong(k(K_BUSY), 0)
         }.apply()
         return before
     }
 
     /** Session / weekly percentages over the last 7 days (shown as a chart in the app). */
-    val history7d: List<HistoryPoint> get() = History.fromJson(prefs.getString(K_HIST, null))
+    val history7d: List<HistoryPoint> get() = History.fromJson(prefs.getString(k(K_HIST), null))
 
-    /** Log of the last 100 reads (time, origin, result; nothing sensitive), readable with adb run-as. */
+    private fun k(base: String) = AccountModel.key(base, accountId)
+
+    /** Forgets this account's values (account removed). */
+    fun clear() = prefs.edit().apply { for (b in listOf(K_SNAP, K_ERR, K_BUSY, K_HIST)) remove(k(b)) }.apply()
+
+    /** Log of the last 100 reads, all accounts (account id, never its name) (time, origin, result; nothing sensitive), readable with adb run-as. */
     val history: List<String> get() = prefs.getString(K_LOG, "")!!.lines().filter { it.isNotBlank() }
 
     fun log(line: String) {

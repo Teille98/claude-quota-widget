@@ -10,7 +10,7 @@ public sealed class FlyoutForm : Form
     [DllImport("dwmapi.dll")]
     static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
-    const int W = 360, Pad = 18, HeaderH = 62, RowH = 64, BannerH = 64, FooterH = 56, HistoryH = 140;
+    const int W = 360, Pad = 18, HeaderH = 62, RowH = 64, BannerH = 64, FooterH = 56, HistoryH = 140, TabsH = 36;
 
     readonly Button _refresh = new() { Text = L10n.T("Refresh", "Rafraîchir") };
     readonly Button _login = new() { Text = L10n.T("Sign in", "Se connecter"), Visible = false };
@@ -21,9 +21,16 @@ public sealed class FlyoutForm : Form
     string? _detail;
     bool _busy;
     IReadOnlyList<HistoryPoint> _history = [];
+    IReadOnlyList<(string Label, bool Attention)> _tabs = [];
+    int _selected;
+    readonly List<RectangleF> _tabRects = [];
     Theme _t = Theme.Current();
 
     public event EventHandler? RefreshRequested;
+    /// <summary>A tab (account) was clicked.</summary>
+    public event EventHandler<int>? TabSelected;
+    /// <summary>Right click on a tab: rename / sign in again / remove.</summary>
+    public event EventHandler<TabMenuEventArgs>? TabMenuRequested;
     public event EventHandler? LoginRequested;
 
     public FlyoutForm()
@@ -80,14 +87,15 @@ public sealed class FlyoutForm : Form
         _login.FlatAppearance.BorderColor = _t.Warning;
     }
 
-    public void SetState(QuotaSnapshot? snap, FetchError error, string? detail, bool busy, IReadOnlyList<HistoryPoint> history)
+    public void SetState(QuotaSnapshot? snap, FetchError error, string? detail, bool busy, IReadOnlyList<HistoryPoint> history,
+        IReadOnlyList<(string Label, bool Attention)> tabs, int selected)
     {
-        _snap = snap; _error = error; _detail = detail; _busy = busy; _history = history;
+        _snap = snap; _error = error; _detail = detail; _busy = busy; _history = history; _tabs = tabs; _selected = selected;
         _refresh.Enabled = !busy;
         _refresh.Text = busy ? L10n.T("Reading…", "Lecture…") : L10n.T("Refresh", "Rafraîchir");
         _login.Visible = error == FetchError.AuthRequired || snap is null;
         var rows = snap?.Limits.Count ?? 0;
-        var h = HeaderH + (HasBanner ? BannerH : 0) + rows * RowH + (rows > 0 ? 8 + HistoryH : 0) + FooterH;
+        var h = HeaderH + (_tabs.Count > 1 ? TabsH : 0) + (HasBanner ? BannerH : 0) + rows * RowH + (rows > 0 ? 8 + HistoryH : 0) + FooterH;
         ClientSize = new Size((int)S(W), (int)S(h));
         Invalidate();
     }
@@ -138,6 +146,11 @@ public sealed class FlyoutForm : Form
         g.DrawString(age, small, muted, right - ageSize.Width, y + S(4));
         g.DrawString(L10n.T("claude.ai plan usage", "Quota de l'abonnement claude.ai"), small, muted, x, y + S(22));
         y = S(HeaderH);
+        if (_tabs.Count > 1)
+        {
+            PaintTabs(g, x, y, right, small);
+            y += S(TabsH);
+        }
 
         if (HasBanner)
         {
@@ -166,6 +179,57 @@ public sealed class FlyoutForm : Form
             y += S(RowH);
         }
         PaintHistory(g, x, y + S(4), right, small, muted, now);
+    }
+
+    /// <summary>One pill per account; the selected one is filled. Amber dot = sign-in required.</summary>
+    void PaintTabs(Graphics g, float left, float top, float right, Font font)
+    {
+        _tabRects.Clear();
+        using var bold = new Font("Segoe UI Semibold", 8.5f);
+        float x = left, h = S(24), gap = S(6);
+        for (var i = 0; i < _tabs.Count; i++)
+        {
+            var (label, attention) = _tabs[i];
+            var f = i == _selected ? bold : font;
+            var text = label;
+            var max = (right - left) / Math.Min(_tabs.Count, 3) - gap;
+            while (text.Length > 4 && g.MeasureString(text, f).Width + S(20) > max) text = text[..^2] + "…";
+            if (text != label && !text.EndsWith('…')) text += "…";
+            var w = g.MeasureString(text, f).Width + S(20);
+            if (x + w > right) break; // more tabs than room: the tray menu still lists every account
+            var r = new RectangleF(x, top + S(2), w, h);
+            _tabRects.Add(r);
+            using (var path = Pill(r))
+            {
+                if (i == _selected) { using var b = new SolidBrush(_t.Track); g.FillPath(b, path); }
+                using var p = new Pen(i == _selected ? _t.Normal : _t.Border);
+                g.DrawPath(p, path);
+            }
+            using var tb = new SolidBrush(i == _selected ? _t.Text : _t.Muted);
+            var sz = g.MeasureString(text, f);
+            g.DrawString(text, f, tb, r.X + (r.Width - sz.Width) / 2, r.Y + (r.Height - sz.Height) / 2);
+            if (attention) { using var wb = new SolidBrush(_t.Warning); g.FillEllipse(wb, r.Right - S(8), r.Y + S(2), S(6), S(6)); }
+            x += w + gap;
+        }
+    }
+
+    static GraphicsPath Pill(RectangleF r)
+    {
+        var p = new GraphicsPath();
+        var d = r.Height;
+        p.AddArc(r.X, r.Y, d, d, 90, 180);
+        p.AddArc(r.Right - d, r.Y, d, d, 270, 180);
+        p.CloseFigure();
+        return p;
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        var i = _tabRects.FindIndex(r => r.Contains(e.Location));
+        if (i < 0) return;
+        if (e.Button == MouseButtons.Left && i != _selected) TabSelected?.Invoke(this, i);
+        else if (e.Button == MouseButtons.Right) TabMenuRequested?.Invoke(this, new TabMenuEventArgs(i, PointToScreen(e.Location)));
     }
 
     /// <summary>7-day chart: weekly usage (thick line), session usage (thin line), 50 % / 80 % thresholds.</summary>
@@ -249,4 +313,10 @@ public sealed class FlyoutForm : Form
         p.CloseFigure();
         g.FillPath(b, p);
     }
+}
+
+public sealed class TabMenuEventArgs(int index, Point location) : EventArgs
+{
+    public int Index { get; } = index;
+    public Point Location { get; } = location;
 }

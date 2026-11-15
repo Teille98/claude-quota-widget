@@ -3,7 +3,39 @@ using Microsoft.Win32;
 
 namespace ClaudeQuota.Win;
 
-/// <summary>The app: tray icon, periodic refresh, panel, sign-in, threshold notifications.</summary>
+/// <summary>State of one claude.ai account: cached values, history, last read result.</summary>
+sealed class AccountState
+{
+    public AccountInfo Info;
+    public readonly QuotaCache Cache;
+    public readonly HistoryFile HistoryFile;
+    public QuotaSnapshot? Snap;
+    public IReadOnlyList<HistoryPoint> History;
+    public FetchError Error = FetchError.None;
+    public string? Detail;
+
+    public AccountState(AccountInfo info)
+    {
+        Info = info;
+        Cache = new QuotaCache(Path.Combine(ClaudeAiUsageSource.AppDir, info.File("last.json")));
+        HistoryFile = new HistoryFile(Path.Combine(ClaudeAiUsageSource.AppDir, info.File("history.json")));
+        Snap = Cache.Load();
+        History = HistoryFile.Load();
+        if (Snap is not null) Error = FetchError.Timeout; // cached value: shown greyed out until the first reading
+    }
+
+    public string ExportPath => Path.Combine(ClaudeAiUsageSource.AppDir, Info.File("quota.json"));
+    public bool NeedsLogin => Error == FetchError.AuthRequired || (Snap is null && Error == FetchError.NoLimits);
+
+    /// <summary>Deletes this account's local files (cache, history, export).</summary>
+    public void DeleteFiles()
+    {
+        foreach (var f in new[] { "last.json", "history.json", "quota.json" })
+            try { File.Delete(Path.Combine(ClaudeAiUsageSource.AppDir, Info.File(f))); } catch (IOException) { }
+    }
+}
+
+/// <summary>The app: tray icon, periodic refresh, panel with one tab per account, sign-in, threshold notifications.</summary>
 public sealed class TrayApp : ApplicationContext
 {
     static readonly TimeSpan Interval = TimeSpan.FromMinutes(5);
@@ -12,33 +44,31 @@ public sealed class TrayApp : ApplicationContext
 
     readonly NotifyIcon _tray = new() { Text = "Claude Quota", Visible = true };
     readonly FlyoutForm _flyout = new();
-    readonly QuotaCache _cache = new(Path.Combine(ClaudeAiUsageSource.AppDir, "last.json"));
-    readonly HistoryFile _historyFile = new(Path.Combine(ClaudeAiUsageSource.AppDir, "history.json"));
-    static readonly string ExportPath = Path.Combine(ClaudeAiUsageSource.AppDir, "quota.json");
-    IReadOnlyList<HistoryPoint> _history = [];
     readonly System.Windows.Forms.Timer _timer = new() { Interval = (int)Interval.TotalMilliseconds };
     readonly ToolStripMenuItem _autostart = new(L10n.T("Start with Windows", "Lancer au démarrage de Windows")) { CheckOnClick = true };
     readonly ToolStripMenuItem _floatItem = new(L10n.T("Floating window", "Fenêtre flottante")) { CheckOnClick = true };
     readonly ToolStripMenuItem _compactItem = new(L10n.T("Compact floating window", "Fenêtre flottante compacte")) { CheckOnClick = true };
     readonly Settings _settings = Settings.Load();
     readonly FloatForm _float;
+    readonly List<AccountState> _accounts = [];
 
-    QuotaSnapshot? _snap;
-    FetchError _error = FetchError.None;
-    string? _detail;
     bool _busy, _loginOpen;
     Icon? _icon;
 
+    AccountState Selected => _accounts.FirstOrDefault(a => a.Info.Id == _settings.Selected) ?? _accounts[0];
+    bool Multi => _accounts.Count > 1;
+    string LabelOf(AccountState a) => a.Info.Label(_accounts.IndexOf(a));
+
     public TrayApp()
     {
-        _snap = _cache.Load();
-        _history = _historyFile.Load();
-        if (_snap is not null) _error = FetchError.Timeout; // cached value: shown greyed out until the first reading
+        if (_settings.Accounts.Count == 0) _settings.Accounts.Add(new AccountInfo(AccountInfo.DefaultId));
+        foreach (var info in _settings.Accounts) _accounts.Add(new AccountState(info));
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(L10n.T("Open panel", "Ouvrir le panneau"), null, (_, _) => ShowFlyout());
         menu.Items.Add(L10n.T("Refresh", "Rafraîchir"), null, async (_, _) => await RefreshAsync());
-        menu.Items.Add(L10n.T("Sign in to claude.ai…", "Se connecter à claude.ai…"), null, async (_, _) => await LoginAsync());
+        menu.Items.Add(L10n.T("Sign in to claude.ai…", "Se connecter à claude.ai…"), null, async (_, _) => await LoginAsync(Selected));
+        menu.Items.Add(L10n.T("Add an account…", "Ajouter un compte…"), null, async (_, _) => await AddAccountAsync());
         menu.Items.Add(new ToolStripSeparator());
         _floatItem.Checked = _settings.Floating;
         _compactItem.Checked = _settings.Compact;
@@ -60,7 +90,9 @@ public sealed class TrayApp : ApplicationContext
         _float.Apply();
 
         _flyout.RefreshRequested += async (_, _) => await RefreshAsync();
-        _flyout.LoginRequested += async (_, _) => await LoginAsync();
+        _flyout.LoginRequested += async (_, _) => await LoginAsync(Selected);
+        _flyout.TabSelected += (_, i) => { _settings.Selected = _accounts[i].Info.Id; _settings.Save(); Render(); };
+        _flyout.TabMenuRequested += (_, e) => ShowTabMenu(e.Index, e.Location);
         _timer.Tick += async (_, _) => await RefreshAsync();
         _timer.Start();
         SystemEvents.PowerModeChanged += OnPower;
@@ -75,86 +107,167 @@ public sealed class TrayApp : ApplicationContext
     {
         await Task.Yield();
         await RefreshAsync();
-        if (_snap is null && _error is FetchError.AuthRequired or FetchError.NoLimits) await LoginAsync();
+        var first = _accounts[0];
+        if (!Multi && first.Snap is null && first.Error is FetchError.AuthRequired or FetchError.NoLimits) await LoginAsync(first);
     }
 
+    /// <summary>Reads every account, one after the other (one hidden browser at a time).</summary>
     async Task RefreshAsync()
     {
         if (_busy || _loginOpen) return;
         _busy = true;
         Render();
-        var r = await ClaudeAiUsageSource.FetchAsync();
-        _busy = false;
-        Apply(r);
+        try
+        {
+            foreach (var a in _accounts.ToList())
+            {
+                var r = await ClaudeAiUsageSource.FetchAsync(a.Info.Profile);
+                if (_accounts.Contains(a)) Apply(a, r);
+            }
+        }
+        finally
+        {
+            _busy = false;
+            Render();
+        }
     }
 
-    void Apply(FetchResult r)
+    void Apply(AccountState a, FetchResult r)
     {
         if (r.Ok)
         {
-            NotifyThresholds(_snap, r.Snapshot!);
-            _snap = r.Snapshot;
-            _cache.Save(_snap!);
-            _history = QuotaHistory.Add(_history, _snap!);
+            NotifyThresholds(a, a.Snap, r.Snapshot!);
+            a.Snap = r.Snapshot;
+            a.Cache.Save(a.Snap!);
+            a.History = QuotaHistory.Add(a.History, a.Snap!);
             try
             {
-                _historyFile.Save(_history);
-                QuotaExport.Write(ExportPath, _snap!); // stable JSON for other tools (see README)
+                a.HistoryFile.Save(a.History);
+                QuotaExport.Write(a.ExportPath, a.Snap!); // stable JSON for other tools (see README)
             }
             catch (IOException) { /* best effort: the display does not depend on these files */ }
-            _error = FetchError.None;
-            _detail = null;
+            a.Error = FetchError.None;
+            a.Detail = null;
+            // First successful read of an unnamed added account: name it after its organization.
+            if (!a.Info.IsDefault && string.IsNullOrWhiteSpace(a.Info.Name) && !string.IsNullOrWhiteSpace(r.Org))
+                Rename(a, r.Org!);
         }
         else
         {
-            if (r.Error == FetchError.AuthRequired && _error != FetchError.AuthRequired)
-                _tray.ShowBalloonTip(5000, "Claude Quota", L10n.T("claude.ai session expired: click the icon to sign in again.", "Session claude.ai expirée : cliquez sur l'icône pour vous reconnecter."), ToolTipIcon.Warning);
-            _error = r.Error;
-            _detail = r.Detail;
+            if (r.Error == FetchError.AuthRequired && a.Error != FetchError.AuthRequired)
+                _tray.ShowBalloonTip(5000, Title(a), L10n.T("claude.ai session expired: click the icon to sign in again.", "Session claude.ai expirée : cliquez sur l'icône pour vous reconnecter."), ToolTipIcon.Warning);
+            a.Error = r.Error;
+            a.Detail = r.Detail;
         }
         Render();
     }
 
-    async Task LoginAsync()
+    string Title(AccountState a) => Multi ? $"Claude Quota · {LabelOf(a)}" : "Claude Quota";
+
+    async Task<bool> LoginAsync(AccountState a)
     {
-        if (_loginOpen) return;
+        if (_loginOpen) return false;
         _loginOpen = true;
         try
         {
-            using var f = new LoginForm();
-            if (f.ShowDialog() == DialogResult.OK && f.Result is { } r) Apply(r);
+            using var f = new LoginForm(a.Info.Profile, Multi ? LabelOf(a) : null);
+            if (f.ShowDialog() == DialogResult.OK && f.Result is { } r) { Apply(a, r); return true; }
+            return false;
         }
-        finally { _loginOpen = false; }
-        await Task.CompletedTask;
+        finally { _loginOpen = false; await Task.CompletedTask; }
+    }
+
+    /// <summary>Adds an account with its own browser profile and opens its sign-in window; cancelled = removed.</summary>
+    async Task AddAccountAsync()
+    {
+        if (_loginOpen || _busy) return;
+        var a = new AccountState(AccountInfo.New());
+        _accounts.Add(a);
+        _settings.Accounts.Add(a.Info);
+        _settings.Selected = a.Info.Id;
+        _settings.Save();
+        Render();
+        if (!await LoginAsync(a)) await RemoveAccountAsync(a, ask: false);
+    }
+
+    async Task RemoveAccountAsync(AccountState a, bool ask = true)
+    {
+        if (a.Info.IsDefault || !_accounts.Contains(a)) return;
+        if (ask && MessageBox.Show(
+                L10n.T($"Remove the account \"{LabelOf(a)}\"? Its claude.ai session and history will be deleted from this PC.",
+                       $"Supprimer le compte « {LabelOf(a)} » ? Sa session claude.ai et son historique seront effacés de ce PC."),
+                "Claude Quota", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        _accounts.Remove(a);
+        _settings.Accounts.RemoveAll(i => i.Id == a.Info.Id);
+        if (_settings.Selected == a.Info.Id) _settings.Selected = _accounts[0].Info.Id;
+        _settings.Save();
+        a.DeleteFiles();
+        Render();
+        await ClaudeAiUsageSource.DeleteProfileAsync(a.Info.Profile!);
+    }
+
+    void Rename(AccountState a, string name)
+    {
+        name = name.Trim();
+        if (name.Length > 40) name = name[..40];
+        a.Info = a.Info with { Name = name };
+        var i = _settings.Accounts.FindIndex(x => x.Id == a.Info.Id);
+        if (i >= 0) _settings.Accounts[i] = a.Info;
+        _settings.Save();
+        Render();
+    }
+
+    void ShowTabMenu(int index, Point screen)
+    {
+        if (index < 0 || index >= _accounts.Count) return;
+        var a = _accounts[index];
+        var m = new ContextMenuStrip();
+        m.Items.Add(L10n.T("Rename…", "Renommer…"), null, (_, _) =>
+        {
+            var name = InputBox.Show(L10n.T("Account name", "Nom du compte"), LabelOf(a));
+            if (name is not null) Rename(a, name);
+        });
+        m.Items.Add(L10n.T("Sign in again…", "Se reconnecter…"), null, async (_, _) => await LoginAsync(a));
+        if (!a.Info.IsDefault) m.Items.Add(L10n.T("Remove this account…", "Supprimer ce compte…"), null, async (_, _) => await RemoveAccountAsync(a));
+        m.Closed += (_, _) => m.BeginInvoke(m.Dispose);
+        m.Show(screen);
     }
 
     /// <summary>Notification when a limit crosses 80% (once per crossing).</summary>
-    void NotifyThresholds(QuotaSnapshot? before, QuotaSnapshot after)
+    void NotifyThresholds(AccountState a, QuotaSnapshot? before, QuotaSnapshot after)
     {
         if (before is null) return;
+        var who = Multi ? $" ({LabelOf(a)})" : "";
         foreach (var l in after.Limits)
         {
             var prev = before.Limits.FirstOrDefault(p => p.Kind == l.Kind && p.Model == l.Model);
             if (prev is not null && prev.Percent < Thresholds.Critical && l.Percent >= Thresholds.Critical)
-                _tray.ShowBalloonTip(8000, L10n.T($"Claude: {l.Label} at {L10n.Pct(l.Percent)}", $"Claude : {l.Label} à {L10n.Pct(l.Percent)}"),
+                _tray.ShowBalloonTip(8000, L10n.T($"Claude: {l.Label} at {L10n.Pct(l.Percent)}", $"Claude : {l.Label} à {L10n.Pct(l.Percent)}") + who,
                     TimeText.Reset(l.ResetsAt, DateTimeOffset.Now), ToolTipIcon.Warning);
         }
     }
 
     void Render()
     {
-        var stale = _error != FetchError.None;
+        // Tray icon: the most constrained limit across all accounts.
+        var worst = _accounts.Where(a => a.Snap is not null).MaxBy(a => a.Snap!.Highest?.Percent ?? 0);
         var old = _icon;
-        _icon = TrayIconRenderer.Ring(_snap?.Highest?.Percent, stale, _error == FetchError.AuthRequired);
+        _icon = TrayIconRenderer.Ring(worst?.Snap!.Highest?.Percent, worst is null || worst.Error != FetchError.None,
+            _accounts.Any(a => a.NeedsLogin));
         _tray.Icon = _icon;
         old?.Dispose();
 
-        var tip = _snap is null ? L10n.T("Claude Quota: no data", "Claude Quota : pas de données")
-            : "Claude · " + string.Join(" · ", _snap.Limits.Where(l => l.Kind != "weekly_scoped").Select(l => $"{l.ShortLabel} {L10n.Pct(l.Percent)}"))
-              + (stale ? $" ({TimeText.Age(_snap.FetchedAt, DateTimeOffset.Now)})" : "");
+        string Line(AccountState a) => a.Snap is null ? L10n.T("no data", "pas de données")
+            : string.Join(" · ", a.Snap.Limits.Where(l => l.Kind != "weekly_scoped").Select(l => $"{l.ShortLabel} {L10n.Pct(l.Percent)}"))
+              + (a.Error != FetchError.None ? $" ({TimeText.Age(a.Snap.FetchedAt, DateTimeOffset.Now)})" : "");
+        var tip = Multi ? string.Join("\n", _accounts.Select(a => $"{LabelOf(a)}: {Line(a)}"))
+            : _accounts[0].Snap is null ? L10n.T("Claude Quota: no data", "Claude Quota : pas de données") : "Claude · " + Line(_accounts[0]);
         _tray.Text = tip.Length > 127 ? tip[..127] : tip;
-        _flyout.SetState(_snap, _error, _detail, _busy, _history);
-        _float.SetState(_snap, _error, _busy);
+
+        var s = Selected;
+        IReadOnlyList<(string Label, bool Attention)> tabs = Multi ? _accounts.Select(a => (LabelOf(a), a.NeedsLogin)).ToList() : [];
+        _flyout.SetState(s.Snap, s.Error, s.Detail, _busy, s.History, tabs, _accounts.IndexOf(s));
+        _float.SetState(s.Snap, s.Error, _busy, Multi ? LabelOf(s) : null);
     }
 
     void ToggleFlyout(Rectangle? anchor = null)
@@ -167,7 +280,8 @@ public sealed class TrayApp : ApplicationContext
     {
         if (anchor is { } a) _flyout.ShowNear(a);
         else _flyout.ShowNearTray();
-        if (_snap is null || DateTimeOffset.Now - _snap.FetchedAt > TimeSpan.FromMinutes(1)) _ = RefreshAsync();
+        var snap = Selected.Snap;
+        if (snap is null || DateTimeOffset.Now - snap.FetchedAt > TimeSpan.FromMinutes(1)) _ = RefreshAsync();
     }
 
     static void SetAutostart(bool on)
@@ -209,5 +323,26 @@ public sealed class TrayApp : ApplicationContext
         _float.Dispose();
         _icon?.Dispose();
         base.ExitThreadCore();
+    }
+}
+
+/// <summary>Minimal text prompt (rename an account).</summary>
+static class InputBox
+{
+    public static string? Show(string title, string value)
+    {
+        using var f = new Form
+        {
+            Text = title, FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterScreen,
+            MinimizeBox = false, MaximizeBox = false, ShowInTaskbar = false, AutoScaleMode = AutoScaleMode.Dpi,
+            ClientSize = new Size(360, 96), Font = new Font("Segoe UI", 9f),
+        };
+        var box = new TextBox { Text = value, Location = new Point(12, 14), Width = 336, MaxLength = 40 };
+        var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, Location = new Point(192, 54), Width = 75 };
+        var cancel = new Button { Text = L10n.T("Cancel", "Annuler"), DialogResult = DialogResult.Cancel, Location = new Point(273, 54), Width = 75 };
+        f.Controls.AddRange([box, ok, cancel]);
+        f.AcceptButton = ok;
+        f.CancelButton = cancel;
+        return f.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(box.Text) ? box.Text : null;
     }
 }

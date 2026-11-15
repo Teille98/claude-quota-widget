@@ -58,7 +58,11 @@ object Widgets {
     )
 
     private class State(ctx: Context) {
-        val store = Store(ctx)
+        val accounts = Accounts(ctx)
+        val account = accounts.selected
+        /** Account name shown in the header when there are several accounts. */
+        val label = if (accounts.list.size > 1) AccountModel.shortName(accounts.displayName(account)) else null
+        val store = Store(ctx, account.id)
         val snap = store.snapshot
         val error = store.error
         val busy = store.busy
@@ -75,9 +79,9 @@ object Widgets {
     )
 
     private fun openIntent(ctx: Context, s: State): PendingIntent {
-        val target = if (s.needsLogin) LoginActivity::class.java else MainActivity::class.java
+        val target = if (s.needsLogin) LoginActivity.intent(ctx, s.account.id) else Intent(ctx, MainActivity::class.java)
         return PendingIntent.getActivity(
-            ctx, if (s.needsLogin) 2 else 1, Intent(ctx, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            ctx, if (s.needsLogin) 2 else 1, target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
     }
@@ -125,13 +129,12 @@ object Widgets {
         v.setOnClickPendingIntent(R.id.root, openIntent(ctx, s))
         v.setOnClickPendingIntent(R.id.refresh, refreshIntent(ctx))
         val snap = s.snap
-        v.setTextViewText(
-            R.id.age, when {
-                s.busy -> ctx.getString(R.string.reading)
-                snap != null -> TimeText.age(snap.fetchedAt, now, loc)
-                else -> ""
-            }
-        )
+        val age = when {
+            s.busy -> ctx.getString(R.string.reading)
+            snap != null -> TimeText.age(snap.fetchedAt, now, loc)
+            else -> ""
+        }
+        v.setTextViewText(R.id.age, listOfNotNull(s.label, age.ifEmpty { null }).joinToString(" · "))
         val banner = if (snap == null || s.stale) message(ctx, s) else null
         v.setViewVisibility(R.id.banner, if (banner != null) View.VISIBLE else View.GONE)
         v.setTextViewText(R.id.banner, banner ?: "")

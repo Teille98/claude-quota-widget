@@ -96,14 +96,19 @@ public sealed class FloatForm : Form
         Location = new Point(a.Right - Width - (int)S(16), a.Bottom - Height - (int)S(16));
     }
 
-    public void SetState(QuotaSnapshot? snap, FetchError error, bool busy)
+    string? _account;
+
+    /// <param name="account">Account name, shown in the tooltip when there are several accounts.</param>
+    public void SetState(QuotaSnapshot? snap, FetchError error, bool busy, string? account = null)
     {
-        _snap = snap; _error = error; _busy = busy;
+        _snap = snap; _error = error; _busy = busy; _account = account;
         _tip.SetToolTip(this, Tooltip());
         Invalidate();
     }
 
-    string Tooltip()
+    string Tooltip() => (_account is null ? "" : _account + "\n") + TooltipBody();
+
+    string TooltipBody()
     {
         if (_snap is null) return L10n.T("Claude Quota: no data yet. Click: open the panel.", "Claude Quota : pas encore de données. Clic : ouvrir le panneau.");
         var now = DateTimeOffset.Now;

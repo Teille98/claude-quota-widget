@@ -26,7 +26,13 @@
 
     <!-- Écran de l'app -->
     <string name="btn_refresh">Rafraîchir</string>
-    <string name="btn_login">Se connecter / changer de compte</string>
+    <string name="btn_login">Se connecter à ce compte</string>
+    <string name="btn_add_account">Ajouter un compte</string>
+    <string name="btn_remove_account">Supprimer ce compte</string>
+    <string name="rename_title">Nom du compte</string>
+    <string name="remove_title">Supprimer « %s » ?</string>
+    <string name="remove_message">Ses valeurs et sa session claude.ai sur ce téléphone seront effacées. Le compte claude.ai lui-même n\'est pas touché.</string>
+    <string name="remove_confirm">Supprimer</string>
     <string name="btn_pin">Ajouter le widget à l\'écran d\'accueil</string>
     <string name="btn_battery">Autoriser les lectures en arrière-plan</string>
     <string name="history_title">7 derniers jours</string>

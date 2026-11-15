@@ -3,7 +3,6 @@ package dev.teo.claudequota
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -26,7 +25,7 @@ object QuotaReader {
 
     fun script(ctx: Context): String = ctx.assets.open("usage-script.js").bufferedReader().use { it.readText() }
 
-    suspend fun read(ctx: Context): String = withContext(Dispatchers.Main) {
+    suspend fun read(ctx: Context, account: Account = Account(AccountModel.DEFAULT)): String = withContext(Dispatchers.Main) {
         val script = script(ctx)
         val main = Handler(Looper.getMainLooper())
         var web: WebView? = null
@@ -42,9 +41,10 @@ object QuotaReader {
                     }
                     val w = WebView(ctx.applicationContext)
                     web = w
+                    Accounts.attach(w, account) // the account's own profile, before anything else
                     w.settings.javaScriptEnabled = true
                     w.settings.domStorageEnabled = true
-                    CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
+                    Accounts.cookies(account).setAcceptThirdPartyCookies(w, true)
                     w.addJavascriptInterface(Bridge { msg -> main.post { finish(msg) } }, "QuotaBridge")
                     w.webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView, url: String) {

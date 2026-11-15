@@ -19,26 +19,33 @@ object Notifier {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, ctx.getString(R.string.channel_name), NotificationManager.IMPORTANCE_DEFAULT))
     }
 
-    fun thresholds(ctx: Context, before: Snapshot?, after: Snapshot) {
+    /** [label] = account name, only when there are several accounts. */
+    fun thresholds(ctx: Context, account: Account, label: String?, before: Snapshot?, after: Snapshot) {
         if (before == null) return
         for (l in after.limits) {
             val prev = before.limits.firstOrNull { it.kind == l.kind && it.model == l.model } ?: continue
             if (prev.percent < Thresholds.CRITICAL && l.percent >= Thresholds.CRITICAL)
                 post(
-                    ctx, l.kind.hashCode(), ctx.getString(R.string.notif_threshold, l.label(ctx.locale()), l.percent),
-                    TimeText.reset(l.resetsAt, Instant.now(), locale = ctx.locale()), MainActivity::class.java
+                    ctx, "${account.id}/${l.kind}/${l.model}".hashCode(),
+                    prefixed(label, ctx.getString(R.string.notif_threshold, l.label(ctx.locale()), l.percent)),
+                    TimeText.reset(l.resetsAt, Instant.now(), locale = ctx.locale()), Intent(ctx, MainActivity::class.java)
                 )
         }
     }
 
-    fun authExpired(ctx: Context) =
-        post(ctx, 1, ctx.getString(R.string.app_name), ctx.getString(R.string.notif_auth), LoginActivity::class.java)
+    fun authExpired(ctx: Context, account: Account, label: String?) =
+        post(
+            ctx, "${account.id}/auth".hashCode(), prefixed(label, ctx.getString(R.string.app_name)),
+            ctx.getString(R.string.notif_auth), LoginActivity.intent(ctx, account.id)
+        )
 
-    private fun post(ctx: Context, id: Int, title: String, text: String, target: Class<*>) {
+    private fun prefixed(label: String?, text: String) = if (label == null) text else "$label · $text"
+
+    private fun post(ctx: Context, id: Int, title: String, text: String, target: Intent) {
         if (ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         ensureChannel(ctx)
         val pi = PendingIntent.getActivity(
-            ctx, id, Intent(ctx, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            ctx, id, target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val n = android.app.Notification.Builder(ctx, CHANNEL)

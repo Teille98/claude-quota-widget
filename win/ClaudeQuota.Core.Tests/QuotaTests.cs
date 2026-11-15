@@ -249,3 +249,39 @@ public class ExportTests
         Assert.Equal("Fable", r.GetProperty("limits")[1].GetProperty("model").GetString());
     }
 }
+
+public class AccountTests
+{
+    [Fact]
+    public void DefaultAccountKeepsOriginalNamesAndProfile()
+    {
+        var a = new AccountInfo(AccountInfo.DefaultId);
+        Assert.Equal("last.json", a.File("last.json"));
+        Assert.Null(a.Profile);
+    }
+
+    [Fact]
+    public void OtherAccountsGetTheirOwnFilesAndProfile()
+    {
+        var a = new AccountInfo("3f9a2c01");
+        Assert.Equal("history-3f9a2c01.json", a.File("history.json"));
+        Assert.Equal("acc-3f9a2c01", a.Profile);
+        Assert.Equal(8, AccountInfo.New().Id.Length);
+    }
+
+    [Fact]
+    public void LabelFallsBackToNumber()
+    {
+        Assert.Equal("Account 2", new AccountInfo("x").Label(1, Lang.En));
+        Assert.Equal("Compte 2", new AccountInfo("x", " ").Label(1, Lang.Fr));
+        Assert.Equal("Team ACME", new AccountInfo("x", "Team ACME ").Label(1, Lang.En));
+    }
+
+    [Fact]
+    public void ParserReadsOrg()
+    {
+        var r = UsageParser.Parse("""{"ok":true,"org":"Team ACME","limits":[{"kind":"session","percent":1}]}""", DateTimeOffset.Now);
+        Assert.Equal("Team ACME", r.Org);
+        Assert.Null(UsageParser.Parse("""{"ok":true,"limits":[{"kind":"session","percent":1}]}""", DateTimeOffset.Now).Org);
+    }
+}

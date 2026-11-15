@@ -3,7 +3,8 @@
 // UNDOCUMENTED endpoint (the one behind Settings > Usage): the whole format is handled here and in UsageParser.
 // The result (a JSON string) is sent to the app via window.chrome.webview.postMessage (Windows)
 // or QuotaBridge.post (Android):
-//   { ok: true,  limits: [{ kind, percent, resets_at, severity, model }] }
+//   { ok: true,  org: string | null, limits: [{ kind, percent, resets_at, severity, model }] }
+// `org` is the organization name, used only as a default account label inside the app (never logged or exported).
 //   { ok: false, reason: 'auth' | 'no-limits' | 'offline' | 'error', status?, message? }
 (async () => {
   const H = { accept: 'application/json' };
@@ -20,6 +21,7 @@
       if (Array.isArray(u.limits) && u.limits.length) {
         return {
           ok: true,
+          org: typeof o.name === 'string' ? o.name : null,
           limits: u.limits.map(l => ({
             kind: l.kind ?? null,
             percent: l.percent ?? null,

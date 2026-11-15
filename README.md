@@ -33,13 +33,14 @@ each with its percentage, a colour that changes at 50 % and 80 %, and when it re
 
 ### Both
 
+- **Several claude.ai accounts** (e.g. a personal and a Team account): each one signs in once in its own browser profile and gets a **tab** — in the Windows panel (right-click a tab to rename, sign in again or remove it; *Add an account…* in the tray menu) and on the Android app screen (long-press a tab to rename it). The Windows tray icon reflects the most constrained account; the floating window and the Android widget show the selected one.
 - **English and French** interface, picked from the system language.
 - Nothing is sent anywhere except to claude.ai, by the embedded browser itself.
 
 ## How it works
 
 1. You sign in to claude.ai **once** in an embedded browser (WebView2 on Windows, Android System WebView). "Continue with Google" works.
-2. To read the quota, the app loads a claude.ai page in a hidden web view and runs [`shared/usage-script.js`](shared/usage-script.js) **inside that page**. The script calls `/api/organizations` and `/api/organizations/{id}/usage` — the same requests the Usage settings page makes — and posts back only the list of limits.
+2. To read the quota, the app loads a claude.ai page in a hidden web view and runs [`shared/usage-script.js`](shared/usage-script.js) **inside that page**. The script calls `/api/organizations` and `/api/organizations/{id}/usage` — the same requests the Usage settings page makes — and posts back only the list of limits (plus the organization name, used as the default label of an added account).
 3. The app parses that list, caches the last good values, and updates the tray icon or widget.
 
 ### Privacy and security
@@ -51,12 +52,12 @@ each with its percentage, a colour that changes at 50 % and 80 %, and when it re
 
 | Platform | Location | Contents |
 |---|---|---|
-| Windows | `%LOCALAPPDATA%\ClaudeQuotaWidget\` | `last.json` (cached values), `history.json` (7-day history), `quota.json` (export), `settings.json` (preferences), `WebView2\` (browser profile holding the claude.ai session) |
+| Windows | `%LOCALAPPDATA%\ClaudeQuotaWidget\` | `last.json` (cached values), `history.json` (7-day history), `quota.json` (export), `settings.json` (preferences and account names), `WebView2\` (browser profiles holding the claude.ai sessions); additional accounts use `*-<id>.json` files and their own profile |
 | Android | app-private storage | cached values, 7-day history, a log of the last 100 reads (time, result, duration — no personal data), the WebView profile |
 
 ## JSON export (Windows)
 
-After every successful read, the Windows app writes `%LOCALAPPDATA%\ClaudeQuotaWidget\quota.json`, so scripts and other tools (a Claude Code status line, a dashboard…) can show the quota without talking to claude.ai themselves. The format is stable within a `schema` version:
+After every successful read, the Windows app writes `%LOCALAPPDATA%\ClaudeQuotaWidget\quota.json` (first account; additional accounts get `quota-<id>.json`), so scripts and other tools (a Claude Code status line, a dashboard…) can show the quota without talking to claude.ai themselves. The format is stable within a `schema` version:
 
 ```json
 {

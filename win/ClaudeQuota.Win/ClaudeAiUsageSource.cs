@@ -31,10 +31,32 @@ public static class ClaudeAiUsageSource
     internal static Task<CoreWebView2Environment> CreateEnvironmentAsync() =>
         CoreWebView2Environment.CreateAsync(null, WebProfileDir);
 
-    /// <summary>One reading: creates an invisible WebView2, reads, disposes it (~1.3 s).</summary>
-    public static async Task<FetchResult> FetchAsync()
+    /// <summary>Starts <paramref name="web"/> on the account's browser profile (null = default profile).</summary>
+    internal static async Task InitAsync(WebView2 web, string? profile)
     {
-        using var host = new Form
+        var env = await CreateEnvironmentAsync();
+        if (profile is null) { await web.EnsureCoreWebView2Async(env); return; }
+        var options = env.CreateCoreWebView2ControllerOptions();
+        options.ProfileName = profile;
+        await web.EnsureCoreWebView2Async(env, options);
+    }
+
+    /// <summary>Deletes an account's browser profile (its claude.ai session included).</summary>
+    public static async Task DeleteProfileAsync(string profile)
+    {
+        using var host = HiddenHost(out var web);
+        try
+        {
+            await InitAsync(web, profile);
+            web.CoreWebView2.Profile.Delete();
+        }
+        catch (Exception) { /* nothing to delete, or runtime missing: the files are removed with the app data */ }
+        finally { host.Close(); }
+    }
+
+    static Form HiddenHost(out WebView2 web)
+    {
+        var host = new Form
         {
             ShowInTaskbar = false,
             FormBorderStyle = FormBorderStyle.None,
@@ -43,14 +65,21 @@ public static class ClaudeAiUsageSource
             Size = new Size(400, 300),
             Opacity = 0,
         };
-        using var web = new WebView2 { Dock = DockStyle.Fill };
+        web = new WebView2 { Dock = DockStyle.Fill };
         host.Controls.Add(web);
         host.Show();
+        return host;
+    }
+
+    /// <summary>One reading: creates an invisible WebView2, reads, disposes it (~1.3 s).</summary>
+    public static async Task<FetchResult> FetchAsync(string? profile = null)
+    {
+        using var host = HiddenHost(out var web);
 
         var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
-            await web.EnsureCoreWebView2Async(await CreateEnvironmentAsync());
+            await InitAsync(web, profile);
             var core = web.CoreWebView2;
             core.WebMessageReceived += (_, e) => tcs.TrySetResult(e.TryGetWebMessageAsString());
             core.NavigationCompleted += async (_, e) =>
@@ -103,9 +132,12 @@ public sealed class LoginForm : Form
 
     public FetchResult? Result { get; private set; }
 
-    public LoginForm()
+    readonly string? _profile;
+
+    public LoginForm(string? profile = null, string? account = null)
     {
-        Text = L10n.T("Claude Quota — sign in to claude.ai", "Claude Quota — connexion à claude.ai");
+        _profile = profile;
+        Text = L10n.T("Claude Quota — sign in to claude.ai", "Claude Quota — connexion à claude.ai") + (account is null ? "" : $" ({account})");
         ClientSize = new Size(1000, 760);
         StartPosition = FormStartPosition.CenterScreen;
         Controls.Add(_web);
@@ -117,7 +149,7 @@ public sealed class LoginForm : Form
     {
         try
         {
-            await _web.EnsureCoreWebView2Async(await ClaudeAiUsageSource.CreateEnvironmentAsync());
+            await ClaudeAiUsageSource.InitAsync(_web, _profile);
         }
         catch (WebView2RuntimeNotFoundException)
         {

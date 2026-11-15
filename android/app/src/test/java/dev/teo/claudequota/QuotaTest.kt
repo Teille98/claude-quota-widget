@@ -183,4 +183,43 @@ class QuotaTest {
         assertEquals(emptyList<HistoryPoint>(), History.fromJson("{broken"))
         assertEquals(emptyList<HistoryPoint>(), History.fromJson(null))
     }
+
+    @Test fun orgIsOptional() {
+        assertNull(UsageParser.parse(real, now).org)
+        val withOrg = real.replaceFirst("{\"ok\":true,", "{\"ok\":true,\"org\":\"  Acme Team \",")
+        assertEquals("Acme Team", UsageParser.parse(withOrg, now).org)
+        val blank = real.replaceFirst("{\"ok\":true,", "{\"ok\":true,\"org\":\"\",")
+        assertNull(UsageParser.parse(blank, now).org)
+    }
+
+    @Test fun accountKeys() {
+        assertEquals("snapshot", AccountModel.key("snapshot", AccountModel.DEFAULT))
+        assertEquals("snapshot@2", AccountModel.key("snapshot", "2"))
+    }
+
+    @Test fun accountListAlwaysHasDefaultFirst() {
+        assertEquals(listOf(Account(AccountModel.DEFAULT)), AccountModel.fromJson(null))
+        assertEquals(listOf(Account(AccountModel.DEFAULT)), AccountModel.fromJson("{broken"))
+        val list = listOf(Account("2", "Work"), Account(AccountModel.DEFAULT, "Me"))
+        val back = AccountModel.fromJson(AccountModel.toJson(list))
+        assertEquals(listOf(Account(AccountModel.DEFAULT, "Me"), Account("2", "Work")), back)
+    }
+
+    @Test fun accountIdsAndNames() {
+        val list = listOf(Account(AccountModel.DEFAULT), Account("2"), Account("5", "Team"))
+        assertEquals("6", AccountModel.nextId(list))
+        assertEquals("2", AccountModel.nextId(listOf(Account(AccountModel.DEFAULT))))
+        assertEquals("Account 2", AccountModel.displayName(list[1], 1, java.util.Locale.ENGLISH))
+        assertEquals("Compte 2", AccountModel.displayName(list[1], 1, java.util.Locale.FRENCH))
+        assertEquals("Team", AccountModel.displayName(list[2], 2, java.util.Locale.ENGLISH))
+        assertEquals("Short", AccountModel.shortName("Short"))
+        assertEquals("A very long o…", AccountModel.shortName("A very long organization name"))
+    }
+
+    @Test fun orgNamesOnlyUnnamedAccounts() {
+        val list = listOf(Account(AccountModel.DEFAULT), Account("2", "Mine"))
+        assertEquals("Org", AccountModel.withOrgName(list, AccountModel.DEFAULT, "Org")[0].name)
+        assertEquals("Mine", AccountModel.withOrgName(list, "2", "Org")[1].name)
+        assertEquals(list, AccountModel.withOrgName(list, AccountModel.DEFAULT, null))
+    }
 }
