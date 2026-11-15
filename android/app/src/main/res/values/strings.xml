@@ -1,0 +1,38 @@
+<resources>
+    <string name="app_name">Claude Quota</string>
+    <string name="widget_desc">Claude subscription quota: session (5h) and week</string>
+    <string name="login_title">Sign in to claude.ai</string>
+    <string name="needs_login">Sign-in required</string>
+
+    <!-- Widget -->
+    <string name="short_session">5h</string>
+    <string name="short_week">7d</string>
+    <string name="percent">%d%%</string>
+    <string name="reading">reading…</string>
+    <string name="col_session">Session · 5h</string>
+    <string name="col_week">Week</string>
+    <string name="col_model">Wk · %s</string>
+    <string name="model_fallback">model</string>
+    <string name="msg_login">Sign-in required: tap to sign in.</string>
+    <string name="msg_busy">Reading…</string>
+    <string name="msg_offline">Offline: showing the last values.</string>
+    <string name="msg_format">Unexpected format: the widget needs an update.</string>
+    <string name="msg_first">Tap to sign in to claude.ai.</string>
+    <string name="msg_error">Read error: showing the last values.</string>
+
+    <!-- Notifications -->
+    <string name="channel_name">Quota alerts</string>
+    <string name="notif_threshold">Claude: %1$s at %2$d%%</string>
+    <string name="notif_auth">claude.ai session expired: tap to sign in again.</string>
+
+    <!-- App screen -->
+    <string name="btn_refresh">Refresh</string>
+    <string name="btn_login">Sign in / switch account</string>
+    <string name="btn_pin">Add the widget to the home screen</string>
+    <string name="btn_battery">Allow background reads</string>
+    <string name="history_title">Last 7 days</string>
+    <string name="history_session">Session (5h)</string>
+    <string name="history_week">Week</string>
+    <string name="history_empty">The history fills up as the quota is read.</string>
+    <string name="main_note">Android reads the quota about every 15 minutes when a network is available. The widget always shows how old the values are (\"… ago\"). Your claude.ai session stays inside the app\'s WebView: nothing else is stored.</string>
+</resources>

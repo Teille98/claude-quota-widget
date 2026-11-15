@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2×1 widget: two rings, session (5h) and week (7d). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:clipToOutline="true"
+    android:padding="8dp">
+    <LinearLayout
+        android:id="@+id/rings"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="horizontal">
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+            <FrameLayout android:layout_width="40dp" android:layout_height="40dp">
+                <ImageView android:id="@+id/ring1" android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:importantForAccessibility="no" />
+                <TextView android:id="@+id/pct1" android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:gravity="center" android:textColor="@color/text" android:textSize="12sp" android:textStyle="bold" />
+            </FrameLayout>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:text="@string/short_session" android:textColor="@color/muted" android:textSize="11sp" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+            <FrameLayout android:layout_width="40dp" android:layout_height="40dp">
+                <ImageView android:id="@+id/ring2" android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:importantForAccessibility="no" />
+                <TextView android:id="@+id/pct2" android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:gravity="center" android:textColor="@color/text" android:textSize="12sp" android:textStyle="bold" />
+            </FrameLayout>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:text="@string/short_week" android:textColor="@color/muted" android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+    <TextView
+        android:id="@+id/message"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:padding="4dp"
+        android:textColor="@color/muted"
+        android:textSize="12sp"
+        android:visibility="gone" />
+    <ImageView
+        android:id="@+id/dot"
+        android:layout_width="10dp"
+        android:layout_height="10dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="6dp"
+        android:src="@drawable/dot"
+        android:visibility="gone"
+        android:contentDescription="@string/needs_login" />
+</FrameLayout>

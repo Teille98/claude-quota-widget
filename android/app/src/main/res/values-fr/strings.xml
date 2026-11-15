@@ -1,0 +1,37 @@
+<resources>
+    <string name="widget_desc">Quota de l\'abonnement Claude : session (5 h) et semaine</string>
+    <string name="login_title">Connexion à claude.ai</string>
+    <string name="needs_login">Reconnexion nécessaire</string>
+
+    <!-- Widget -->
+    <string name="short_session">5 h</string>
+    <string name="short_week">7 j</string>
+    <string name="percent">%d %%</string>
+    <string name="reading">lecture…</string>
+    <string name="col_session">Session · 5 h</string>
+    <string name="col_week">Semaine</string>
+    <string name="col_model">Sem. · %s</string>
+    <string name="model_fallback">modèle</string>
+    <string name="msg_login">Reconnexion nécessaire : touchez pour vous connecter.</string>
+    <string name="msg_busy">Lecture en cours…</string>
+    <string name="msg_offline">Hors ligne : dernières valeurs affichées.</string>
+    <string name="msg_format">Format inattendu : le widget doit être mis à jour.</string>
+    <string name="msg_first">Touchez pour vous connecter à claude.ai.</string>
+    <string name="msg_error">Erreur de lecture : dernières valeurs affichées.</string>
+
+    <!-- Notifications -->
+    <string name="channel_name">Alertes de quota</string>
+    <string name="notif_threshold">Claude : %1$s à %2$d %%</string>
+    <string name="notif_auth">Session claude.ai expirée : touchez pour vous reconnecter.</string>
+
+    <!-- Écran de l'app -->
+    <string name="btn_refresh">Rafraîchir</string>
+    <string name="btn_login">Se connecter / changer de compte</string>
+    <string name="btn_pin">Ajouter le widget à l\'écran d\'accueil</string>
+    <string name="btn_battery">Autoriser les lectures en arrière-plan</string>
+    <string name="history_title">7 derniers jours</string>
+    <string name="history_session">Session (5 h)</string>
+    <string name="history_week">Semaine</string>
+    <string name="history_empty">L\'historique se remplit au fil des lectures.</string>
+    <string name="main_note">Android relit le quota environ toutes les 15 min, quand le réseau est disponible. Le widget indique toujours l\'âge des valeurs (« il y a … »). Votre session claude.ai reste dans la WebView de l\'app : rien d\'autre n\'est stocké.</string>
+</resources>

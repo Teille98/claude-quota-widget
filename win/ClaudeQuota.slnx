@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="ClaudeQuota.Core.Tests/ClaudeQuota.Core.Tests.csproj" />
+  <Project Path="ClaudeQuota.Core/ClaudeQuota.Core.csproj" />
+  <Project Path="ClaudeQuota.Win/ClaudeQuota.Win.csproj" />
+</Solution>

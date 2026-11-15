@@ -1,0 +1,9 @@
+<resources>
+    <color name="surface">#2A2833</color>
+    <color name="text">#F2F2F5</color>
+    <color name="muted">#A8A8B3</color>
+    <color name="track">#43434C</color>
+    <color name="normal">#9D90FF</color>
+    <color name="warning">#F2B33D</color>
+    <color name="critical">#FF7A52</color>
+</resources>

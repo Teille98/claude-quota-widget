@@ -1,0 +1,29 @@
+# Local data written by the bridge
+data/
+
+# .NET
+bin/
+obj/
+*.user
+
+# Android / Gradle
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/
+*.apk
+*.jks
+*.keystore
+
+# Release artifacts (installer, APK)
+dist/
+
+# Node
+node_modules/
+
+# Misc
+*.tmp
+.DS_Store
+Thumbs.db
